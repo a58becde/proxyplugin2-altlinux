@@ -182,11 +182,15 @@
             ext = pol.setdefault("ExtensionSettings", {})
             if action == "add":
                 ext[ext_id] = {"installation_mode": "force_installed", "install_url": url}
+            elif action == "remove":
+                # Именно blocked: снятие force_installed лишь перестаёт удерживать
+                # расширение, а Firefox продолжает считать его установленным.
+                ext[ext_id] = {"installation_mode": "blocked"}
             else:
                 ext.pop(ext_id, None)
                 if not ext:
                     pol.pop("ExtensionSettings", None)
-            if action == "remove" and not pol:
+            if action == "purge" and not pol:
                 os.path.exists(path) and os.remove(path)
                 print("removed")
                 sys.exit(0)

@@ -207,7 +207,9 @@ p = d['policies']
 assert p.get('DisableTelemetry') is True, 'чужой ключ политики потерян при удалении'
 e = p.get('ExtensionSettings', {})
 assert 'mis-watch@nokod.local' in e, 'чужое расширение выброшено при удалении'
-assert sys.argv[2] not in e, 'наша политика не удалена'
+assert e[sys.argv[2]]['installation_mode'] == 'blocked', \
+    'после удаления Firefox должен получить blocked, иначе расширение останется'
+assert 'install_url' not in e[sys.argv[2]], e
 PYPOL2
 [ -e "${PROFILE}/extensions/${XPI_ID}.xpi" ] && fail "остался xpi в профиле"
 [ -e "${PROFILE2}/extensions/${XPI_ID}.xpi" ] && fail "остался xpi во втором профиле"

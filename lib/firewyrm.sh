@@ -159,7 +159,17 @@ fw_ff_manifest_json() {
 JSON
 }
 
-# fw_ff_policy <add|remove>
+# fw_ff_policy <add|remove|purge>
+#
+#   add     force_installed — расширение ставится и удерживается
+#   remove  blocked — Firefox СНИМАЕТ расширение при следующем запуске
+#   purge   запись удаляется совсем
+#
+# Именно blocked, а не удаление записи: убрать force_installed означает лишь
+# «больше не удерживать принудительно» — Firefox снимает замочек, а само
+# расширение остаётся установленным, потому что оно уже в его базе и файл на
+# диске ему больше не нужен. Запись blocked снимается позже, командой purge,
+# когда все машины перезапустили браузер.
 fw_ff_policy() {
     local action="$1" tmp
     command -v python3 >/dev/null 2>&1 || {
@@ -195,12 +205,14 @@ ext = pol.setdefault('ExtensionSettings', {})
 
 if action == 'add':
     ext[ext_id] = {'installation_mode': 'force_installed', 'install_url': url}
+elif action == 'remove':
+    ext[ext_id] = {'installation_mode': 'blocked'}
 else:
     ext.pop(ext_id, None)
     if not ext:
         pol.pop('ExtensionSettings', None)
 
-if action == 'remove' and not pol:
+if action == 'purge' and not pol:
     # Файл наш и больше в нём ничего нет — убираем целиком.
     print('EMPTY')
     sys.exit(0)
@@ -223,6 +235,21 @@ PYFF
         fw_info "если файл защищён от записи: chattr -i $FW_FF_POLICY"
     fi
     return 0
+}
+
+# Режим нашей записи в политике Firefox: force_installed, blocked или пусто.
+# Именно нашей: grep по файлу находил бы и чужие записи с тем же словом.
+fw_ff_policy_mode() {
+    command -v python3 >/dev/null 2>&1 || return 0
+    python3 -c '
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+e = d.get("policies", {}).get("ExtensionSettings", {}).get(sys.argv[2], {})
+print(e.get("installation_mode", ""))
+' "$FW_FF_POLICY" "$FW_XPI_ID" 2>/dev/null
 }
 
 fw_policy_json() {
@@ -454,16 +481,16 @@ fw_verify() {
 
         if ! command -v python3 >/dev/null 2>&1; then
             fw_info "нет python3 — политика Firefox не проверяется"
-        elif [ -f "${FW_FF_POLICY}" ] && grep -q "${FW_XPI_ID}" "${FW_FF_POLICY}"; then
+        elif [ "$(fw_ff_policy_mode)" = force_installed ]; then
             fw_ok "${FW_FF_POLICY}"
         else
-            fw_warn "в ${FW_FF_POLICY} нет политики для расширения"
+            fw_warn "в ${FW_FF_POLICY} нет установки расширения (force_installed)"
             errors=$((errors + 1))
         fi
     else
         fw_info "${FW_XPI} не установлен (Firefox пропущен)"
-        if [ -f "${FW_FF_POLICY}" ] && grep -q "${FW_XPI_ID}" "${FW_FF_POLICY}"; then
-            fw_warn "в ${FW_FF_POLICY} осталась политика для ${FW_XPI_ID}"
+        if [ "$(fw_ff_policy_mode)" = force_installed ]; then
+            fw_warn "в ${FW_FF_POLICY} осталась установка ${FW_XPI_ID}"
             errors=$((errors + 1))
         fi
         # Эталона нет, а копии есть — значит удаление отработало не до конца.

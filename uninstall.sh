@@ -107,8 +107,8 @@ while IFS= read -r path; do
     remaining=$((remaining + 1))
 done < <(fw_xpi_run list "${FW_XPI_ID}")
 
-if [ -f "${FW_FF_POLICY}" ] && grep -q "${FW_XPI_ID}" "${FW_FF_POLICY}"; then
-    fw_warn "осталась политика в ${FW_FF_POLICY}"
+if [ "$(fw_ff_policy_mode)" = force_installed ]; then
+    fw_warn "в ${FW_FF_POLICY} осталась установка расширения"
     remaining=$((remaining + 1))
 fi
 
@@ -119,7 +119,11 @@ else
     printf '  ОСТАЛОСЬ ОБЪЕКТОВ: %d (см. выше)\n' "$remaining"
 fi
 printf '==========================================\n\n'
-printf 'Расширение %s удалится из браузера\nпосле его перезапуска (политика снята).\n' "${FW_EXT_ID}"
+printf 'Расширение удалится из браузеров после их перезапуска:\n'
+printf '  Chromium — политика снята;\n'
+printf '  Firefox  — политика переведена в blocked, он снимет расширение сам.\n'
+printf 'Когда все машины перезапустили Firefox, запись можно убрать совсем:\n'
+printf '  . %s/lib/firewyrm.sh && fw_ff_policy purge\n' "${FW_ROOT}"
 printf 'Переустановка: %s/install.sh\n' "${FW_ROOT}"
 
 [ "$remaining" -eq 0 ]

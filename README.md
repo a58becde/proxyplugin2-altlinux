@@ -126,6 +126,17 @@ ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01,ws
 | Манифест native messaging (Firefox) | `/usr/lib64/mozilla/native-messaging-hosts/` — формат отличается: `allowed_extensions` вместо `allowed_origins` |
 | Политика Chromium | `/etc/chromium/policies/managed/firewyrm.json` и аналоги |
 | Политика Firefox | `/etc/firefox/policies/policies.json` — **слиянием**, чужие ключи сохраняются |
+
+При удалении запись в политике Firefox не убирается, а переводится в
+`installation_mode: blocked` — только так браузер действительно снимает
+расширение. Снятие `force_installed` означает лишь «больше не удерживать
+принудительно»: замочек в `about:addons` исчезает, а расширение остаётся
+установленным, потому что оно уже в базе браузера. Когда все машины
+перезапустили Firefox, запись можно убрать совсем:
+
+```bash
+. lib/firewyrm.sh && fw_ff_policy purge
+```
 | Расширение Firefox | профили из `profiles.ini` и `distribution/extensions` |
 
 Установка общесистемная, поэтому имя пользователя нигде не требуется. Каталог
