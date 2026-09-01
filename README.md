@@ -216,8 +216,9 @@ Firefox 140 ESR понимает `browser_specific_settings.gecko.data_collectio
 ## Правовой статус
 
 Код установщика (`install.sh`, `uninstall.sh`, `lib/`, `ansible/`, `test.sh`,
-`firefox-extension/manifest.json`, `firefox-extension/kickstart.js`) написан
-для внутреннего развёртывания и распространяется как есть.
+`docs/`, `firefox-extension/manifest.json`, `firefox-extension/kickstart.js`,
+`firefox-extension/build.sh`, `firefox-extension/vendor-patch.diff`)
+распространяется по лицензии MIT — см. [LICENSE](LICENSE).
 
 Файлы в `sedd/`, а также `background.js`, `content.js`, `FirePromise.js` и
 `icon-128.png` в `firefox-extension/` принадлежат ООО «Интертраст» и включены

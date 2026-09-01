@@ -1,0 +1,55 @@
+MIT License
+
+Copyright (c) 2026 a58becde
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+ОБЛАСТЬ ДЕЙСТВИЯ / SCOPE
+
+Лицензия выше распространяется только на код установщика:
+
+    install.sh, uninstall.sh, test.sh
+    lib/
+    ansible/
+    docs/
+    firefox-extension/manifest.json
+    firefox-extension/kickstart.js
+    firefox-extension/build.sh
+    firefox-extension/vendor-patch.diff
+
+Она НЕ распространяется на файлы ООО «Интертраст», включённые в репозиторий
+для воспроизводимости сборки:
+
+    sedd/FireWyrmNativeMessageHost
+    sedd/npProxyPlugin2.so
+    sedd/ru.intertrust.firewyrmhost.json
+    firefox-extension/FirePromise.js
+    firefox-extension/background.js
+    firefox-extension/content.js
+    firefox-extension/icon-128.png
+    firefox-extension/upstream-chrome-1.4/
+
+Права на них принадлежат правообладателю, условия их использования
+определяются лицензией на СЭДД Company Media и условиями Chrome Web Store.
+
+The MIT license above covers the installer code only. Files belonging to
+Intertrust LLC, listed above, are not covered and remain the property of
+their copyright holder.
