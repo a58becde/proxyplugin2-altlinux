@@ -8,6 +8,8 @@
 #   FW_PREFIX=/opt/sedd ./install.sh
 # ---------------------------------------------------------------------------
 
+FW_LIB_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 # --- Параметры установки ---------------------------------------------------
 
 # Префикс всей файловой иерархии. Пустой на рабочей машине; задаётся при
@@ -164,12 +166,18 @@ fw_ff_policy() {
         fw_warn "нет python3 — политика Firefox не настроена, потребуется два запуска браузера"
         return 0
     }
-    [ "$action" = add ] && install -d -m 0755 -- "${FW_FF_POLICY%/*}"
+    if [ "$action" = add ] && ! install -d -m 0755 -- "${FW_FF_POLICY%/*}"; then
+        fw_warn "не удалось создать ${FW_FF_POLICY%/*} — политика Firefox не настроена"
+        return 0
+    fi
     [ -d "${FW_FF_POLICY%/*}" ] || return 0
 
+    # В install_url путь должен быть таким, каким его увидит браузер на целевой
+    # системе: префикс образа (FW_SYSROOT) в него попадать не должен.
     tmp="${FW_FF_POLICY}.fw-tmp"
+    rm -f -- "$tmp"    # от прерванного запуска мог остаться чужой tmp
     if python3 - "$FW_FF_POLICY" "$tmp" "$action" "$FW_XPI_ID" \
-                 "file://${FW_PREFIX}/${FW_XPI}" <<'PYFF'
+                 "file://${FW_PREFIX#"$FW_SYSROOT"}/${FW_XPI}" <<'PYFF'
 import json, os, sys
 src, tmp, action, ext_id, url = sys.argv[1:6]
 try:
@@ -294,60 +302,16 @@ fw_clean_user_leftovers() {
 
 # --- Расширение Firefox ----------------------------------------------------
 
-# Куда кладётся xpi. Имя каталога профиля у каждого пользователя своё
-# (r906vq7n.default-default), поэтому глоб по *.default*.
-# Профили пользователя так, как их видит сам Firefox: список лежит в
-# profiles.ini. Маска по имени (*.default*) — только запасной вариант: имя
-# каталога профиля произвольное, активный может называться как угодно.
-fw_profile_dirs() {
-    local ffdir="${1%/}" ini="${1%/}/profiles.ini" path
-    if [ -f "$ini" ]; then
-        while IFS= read -r path; do
-            [ -n "$path" ] || continue
-            case "$path" in
-                /*) [ -d "$path" ] && printf '%s/\n' "${path%/}" ;;
-                *)  [ -d "${ffdir}/${path}" ] && printf '%s/%s/\n' "$ffdir" "${path%/}" ;;
-            esac
-        done < <(sed -n 's/^[[:space:]]*Path[[:space:]]*=[[:space:]]*//p' "$ini" | tr -d '\r')
-    else
-        for path in "$ffdir"/*.default*/; do
-            [ -d "$path" ] && printf '%s\n' "$path"
-        done
-    fi
-    return 0
-}
+# Вся работа с профилями Firefox — в отдельном скрипте, который вызывают и
+# эти функции, и плейбуки Ansible. Логика одна на оба способа установки.
+FW_XPI_SCRIPT="${FW_LIB_DIR}/firewyrm-firefox-xpi.sh"
 
-fw_xpi_targets() {
-    local dir prof d
-    for dir in "${FW_USER_DIRS[@]}"; do
-        [ -d "${dir%/}/.mozilla/firefox" ] || continue
-        while IFS= read -r prof; do
-            printf '%sextensions/%s.xpi\n' "$prof" "${FW_XPI_ID}"
-        done < <(fw_profile_dirs "${dir%/}/.mozilla/firefox")
-    done
-    for d in "${FW_FIREFOX_DIRS[@]}"; do
-        [ -d "$d" ] && printf '%s/distribution/extensions/%s.xpi\n' "$d" "${FW_XPI_ID}"
-    done
-    return 0
-}
-
-# Где расширение может лежать фактически. Шире, чем fw_xpi_targets: ставим
-# только в профили *.default*, а искать остатки нужно во всех — Firefox,
-# подхватив xpi из distribution/extensions, заводит собственную копию в том
-# профиле, который активен, а его имя под маску может не попадать.
-fw_xpi_strays() {
-    local dir prof d
-    for dir in "${FW_USER_DIRS[@]}"; do
-        for prof in "${dir%/}"/.mozilla/firefox/*/; do
-            [ -e "${prof}extensions/${FW_XPI_ID}.xpi" ] \
-                && printf '%sextensions/%s.xpi\n' "$prof" "${FW_XPI_ID}"
-        done
-    done
-    for d in "${FW_FIREFOX_DIRS[@]}"; do
-        [ -e "$d/distribution/extensions/${FW_XPI_ID}.xpi" ] \
-            && printf '%s/distribution/extensions/%s.xpi\n' "$d" "${FW_XPI_ID}"
-    done
-    return 0
+fw_xpi_run() {   # <install|remove|list> [аргументы]
+    [ -x "${FW_XPI_SCRIPT}" ] || fw_die "нет вспомогательного скрипта ${FW_XPI_SCRIPT}
+Он обязателен: в нём вся работа с профилями Firefox. Скопируйте его вместе
+с install.sh, uninstall.sh и lib/firewyrm.sh."
+    FW_USER_DIRS="${FW_USER_DIRS[*]}" FW_FIREFOX_DIRS="${FW_FIREFOX_DIRS[*]}" \
+        "${FW_XPI_SCRIPT}" "$@"
 }
 
 # Проверка файла расширения до установки. Два отказа тихие и потому опасные:
@@ -398,23 +362,11 @@ except Exception:
 }
 
 fw_install_xpi() {
-    local src="$1" target dir found=0
+    local src="$1" target found=0
     while IFS= read -r target; do
-        # Каталог профиля чужой: создаём extensions только если его нет и не
-        # трогаем права существующего. install -d выставлял бы 0755 поверх
-        # штатных 0700, открывая профиль пользователя на чтение всем.
-        dir="${target%/*}"
-        [ -d "$dir" ] || mkdir -p "$dir"
-        cp -f -- "$src" "$target"
-        chmod 0644 "$target"
-        # Файл обязан принадлежать владельцу профиля, а не root: иначе в
-        # домашнем каталоге пользователя остаётся root-овый объект.
-        if ! chown --reference="${target%/extensions/*}" "$target" "$dir" 2>/dev/null; then
-            fw_warn "не удалось выставить владельца для $target — проверьте права"
-        fi
         fw_ok "$target"
         found=1
-    done < <(fw_xpi_targets)
+    done < <(fw_xpi_run install "${FW_XPI_ID}" "$src")
     [ "$found" -eq 1 ] || fw_info "профили Firefox и каталоги установки не найдены"
 }
 
@@ -469,18 +421,27 @@ fw_verify() {
     fi
 
     # Расширение Firefox необязательно: пока нет подписанной сборки, его просто
-    # не ставят. Но если эталон в ${FW_PREFIX} лежит - он обязан быть разложен.
+    # не ставят. Копии в профилях — справочно: профиль мог появиться уже после
+    # установки, и Firefox возьмёт расширение из distribution/extensions.
     if [ -f "${FW_PREFIX}/${FW_XPI}" ]; then
         fw_ok "${FW_PREFIX}/${FW_XPI}"
-        while IFS= read -r file; do
+        for dir in "${FW_FIREFOX_DIRS[@]}"; do
+            [ -d "$dir" ] || continue
+            file="${dir}/distribution/extensions/${FW_XPI_ID}.xpi"
             if [ -f "$file" ]; then
                 fw_ok "$file"
             else
                 fw_warn "нет расширения $file"
                 errors=$((errors + 1))
             fi
-        done < <(fw_xpi_targets)
-        if [ -f "${FW_FF_POLICY}" ] && grep -q "${FW_XPI_ID}" "${FW_FF_POLICY}"; then
+        done
+        while IFS= read -r file; do
+            fw_ok "$file"
+        done < <(fw_xpi_run list "${FW_XPI_ID}" | grep -v '/distribution/extensions/' || true)
+
+        if ! command -v python3 >/dev/null 2>&1; then
+            fw_info "нет python3 — политика Firefox не проверяется"
+        elif [ -f "${FW_FF_POLICY}" ] && grep -q "${FW_XPI_ID}" "${FW_FF_POLICY}"; then
             fw_ok "${FW_FF_POLICY}"
         else
             fw_warn "в ${FW_FF_POLICY} нет политики для расширения"
@@ -492,11 +453,11 @@ fw_verify() {
             fw_warn "в ${FW_FF_POLICY} осталась политика для ${FW_XPI_ID}"
             errors=$((errors + 1))
         fi
-        # Эталона нет, а копии есть - значит удаление отработало не до конца.
+        # Эталона нет, а копии есть — значит удаление отработало не до конца.
         while IFS= read -r file; do
             fw_warn "остался файл расширения: $file"
             errors=$((errors + 1))
-        done < <(fw_xpi_strays)
+        done < <(fw_xpi_run list "${FW_XPI_ID}")
     fi
 
     for dir in "${FW_POLICY_DIRS[@]}"; do

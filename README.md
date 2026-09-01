@@ -37,7 +37,9 @@ native messaging, политики принудительной установк
   139.0.7258.138 (сборка ALT Linux)
 * **Firefox ESR** — опционально, только если нужна работа СЭДД в нём.
   Проверено на 140.13.0 ESR
-* `python3` — для проверки xpi и слияния политик Firefox
+* `python3` на целевой машине — для проверки xpi и слияния политик Firefox.
+  Для варианта с Ansible обязателен в любом случае: без него не работают
+  его собственные модули
 * Для варианта с Ansible: ansible-core на управляющем узле,
   проверено на 2.15.9 с Python 3.9
 * Дистрибутив вендора в `sedd/`: `FireWyrmNativeMessageHost`,
@@ -76,8 +78,12 @@ su -
 целевые машины заранее копировать ничего не надо.
 
 ```bash
-scp ansible/firewyrm_*.yml root@<управляющий-узел>:/etc/ansible/playbook/
+scp ansible/firewyrm_*.yml lib/firewyrm-firefox-xpi.sh root@<управляющий-узел>:/etc/ansible/playbook/
 ```
+
+`firewyrm-firefox-xpi.sh` — общий с sh-версией скрипт раскладки расширения по
+профилям Firefox. Он должен лежать рядом с плейбуками: логика профилей одна на
+оба способа установки, чтобы они не расходились.
 
 ```bash
 rsync -av --exclude .DS_Store sedd/ root@<управляющий-узел>:/etc/ansible/sedd/
@@ -186,6 +192,7 @@ FW_SRC=/mnt/flash/sedd FW_PREFIX=/opt/sedd ./install.sh
 install.sh, uninstall.sh   установка и удаление без Ansible
 test.sh                    смоук-тест в песочнице, root не нужен
 lib/firewyrm.sh            общие пути, параметры и функции
+lib/firewyrm-firefox-xpi.sh  раскладка расширения по профилям (общий с Ansible)
 ansible/                   те же сценарии на Ansible
 firefox-extension/         сборка расширения под Firefox
 sedd/                      дистрибутив вендора

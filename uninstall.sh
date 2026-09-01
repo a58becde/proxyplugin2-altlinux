@@ -59,9 +59,12 @@ fw_head "Политика Firefox"
 fw_ff_policy remove
 
 fw_head "Удаление расширения Firefox"
+removed=0
 while IFS= read -r path; do
-    fw_rm "$path"
-done < <(fw_xpi_strays)
+    fw_ok "удалено: $path"
+    removed=1
+done < <(fw_xpi_run remove "${FW_XPI_ID}")
+[ "$removed" -eq 1 ] || fw_info "копий расширения не найдено"
 
 fw_head "Удаление манифестов native messaging"
 for dir in "${FW_FF_NM_DIRS[@]}"; do
@@ -95,6 +98,17 @@ for path in "${FW_PREFIX}" \
         remaining=$((remaining + 1))
     fi
 done
+
+# Копии расширения и политика Firefox — то, что чаще всего и остаётся.
+while IFS= read -r path; do
+    fw_warn "остался: $path"
+    remaining=$((remaining + 1))
+done < <(fw_xpi_run list "${FW_XPI_ID}")
+
+if [ -f "${FW_FF_POLICY}" ] && grep -q "${FW_XPI_ID}" "${FW_FF_POLICY}"; then
+    fw_warn "осталась политика в ${FW_FF_POLICY}"
+    remaining=$((remaining + 1))
+fi
 
 printf '\n==========================================\n'
 if [ "$remaining" -eq 0 ]; then

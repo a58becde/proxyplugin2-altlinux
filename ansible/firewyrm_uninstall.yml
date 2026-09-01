@@ -80,14 +80,10 @@
       changed_when: fw_ffpol.stdout in ["written", "removed"]
 
     - name: Удалить расширение Firefox из профилей
-      ansible.builtin.shell:
-        cmd: |
-          rm -vf /home/*/.mozilla/firefox/*.default*/extensions/{{ fw_xpi_id }}.xpi \
-                 /home/*/*/.mozilla/firefox/*.default*/extensions/{{ fw_xpi_id }}.xpi \
-                 /root/.mozilla/firefox/*.default*/extensions/{{ fw_xpi_id }}.xpi
-          for d in {{ fw_firefox_dirs | join(' ') }}; do
-            rm -vf "$d/distribution/extensions/{{ fw_xpi_id }}.xpi"
-          done
+      ansible.builtin.script:
+        cmd: "{{ fw_xpi_helper }} remove {{ fw_xpi_id | quote }}"
+      environment:
+        FW_FIREFOX_DIRS: "{{ fw_firefox_dirs | join(' ') }}"
       register: fw_xpi_rm
       changed_when: fw_xpi_rm.stdout != ""
 

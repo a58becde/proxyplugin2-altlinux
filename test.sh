@@ -124,9 +124,19 @@ PYPOL
 
 "${FW_ROOT}/install.sh" --check > /dev/null || fail "--check не подтвердил установку"
 
-# --check обязан замечать пропажу расширения из профиля
+# Пропажа копии из профиля НЕ ошибка: профиль мог появиться уже после установки,
+# расширение придёт из distribution/extensions и политики.
 rm -f "${PROFILE}/extensions/${XPI_ID}.xpi"
-"${FW_ROOT}/install.sh" --check > /dev/null 2>&1 && fail "--check не заметил пропажу xpi"
+"${FW_ROOT}/install.sh" --check > /dev/null 2>&1 \
+    || fail "--check ругается на профиль без xpi, хотя distribution на месте"
+
+# А пропажа из distribution — ошибка: новые профили останутся без расширения.
+DIST="${FW_SYSROOT}/usr/lib64/firefox/distribution/extensions/${XPI_ID}.xpi"
+mv "$DIST" "${SANDBOX}/dist-backup.xpi"
+"${FW_ROOT}/install.sh" --check > /dev/null 2>&1 \
+    && fail "--check не заметил пропажу xpi из distribution"
+mv "${SANDBOX}/dist-backup.xpi" "$DIST"
+
 "${FW_ROOT}/install.sh" > /dev/null 2>&1 || fail "переустановка после пропажи xpi сломалась"
 [ -f "${PROFILE}/extensions/${XPI_ID}.xpi" ] || fail "xpi не восстановлен переустановкой"
 
@@ -153,6 +163,9 @@ PYEOF
 cp "${SANDBOX}/wrong-id.xpi" "${FW_SRC}/proxyplugin2-firefox.xpi"
 out=$("${FW_ROOT}/install.sh" 2>&1 || true)
 case "$out" in
+    *"Манифесты native messaging"*) fail "установка с чужим id дошла до изменений в системе" ;;
+esac
+case "$out" in
     *"не совпадает с настройкой"*) ;;
     *) fail "установка не заметила чужой id в xpi" ;;
 esac
@@ -164,6 +177,17 @@ case "$out" in
     *"НЕ ПОДПИСАН"*) ;;
     *) fail "установка не предупредила об отсутствии подписи" ;;
 esac
+
+# Отсутствие вспомогательного скрипта обязано быть громкой ошибкой, а не
+# тихим «профили не найдены».
+mv "${FW_ROOT}/lib/firewyrm-firefox-xpi.sh" "${SANDBOX}/helper.bak"
+out=$("${FW_ROOT}/install.sh" 2>&1 || true)
+mv "${SANDBOX}/helper.bak" "${FW_ROOT}/lib/firewyrm-firefox-xpi.sh"
+case "$out" in
+    *"нет вспомогательного скрипта"*) ;;
+    *) fail "пропажа firewyrm-firefox-xpi.sh не замечена" ;;
+esac
+"${FW_ROOT}/install.sh" > /dev/null 2>&1 || fail "установка после возврата скрипта сломалась"
 
 # --- Удаление ---------------------------------------------------------------
 

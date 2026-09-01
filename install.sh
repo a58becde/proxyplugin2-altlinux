@@ -47,6 +47,12 @@ for file in "${FW_HOST_BIN}" "${FW_PLUGIN_SO}"; do
     fw_ok "${file}"
 done
 
+# Проверяем расширение здесь, до любых изменений в системе: несовпадение id —
+# повод не начинать вовсе, а не обрывать установку на середине.
+if [ -f "${FW_SRC}/${FW_XPI}" ]; then
+    fw_xpi_check "${FW_SRC}/${FW_XPI}"
+fi
+
 # --- 2. Браузер -------------------------------------------------------------
 
 fw_head "Браузер ${FW_PACKAGE}"
@@ -85,7 +91,6 @@ fw_ok "${FW_FF_NM_DIR}/${FW_HOST}.json"
 # Подписанной сборки может ещё не быть — Chromium от этого не страдает.
 fw_head "Установка ${FW_XPI}"
 if [ -f "${FW_SRC}/${FW_XPI}" ]; then
-    fw_xpi_check "${FW_SRC}/${FW_XPI}"
     fw_install 0644 "${FW_SRC}/${FW_XPI}" "${FW_PREFIX}/${FW_XPI}"
     fw_ok "${FW_PREFIX}/${FW_XPI}"
     fw_install_xpi "${FW_PREFIX}/${FW_XPI}"
