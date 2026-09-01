@@ -1,0 +1,137 @@
+---
+# Удаление FireWyrm (СЭДД).
+#
+#   ansible-playbook -i /etc/ansible/hosts firewyrm_uninstall.yml -e fw_hosts=ws-01
+#
+# fw_hosts — не переменная из инвентаря, а шаблон целей ansible. Годится всё,
+# что понимает ansible: имя хоста, список через запятую без пробелов, маска,
+# имя группы из /etc/ansible/hosts:
+#   -e fw_hosts=ws-01,ws-02,ws-03
+#   -e fw_hosts='it-*'
+#   -e fw_hosts=sedd            (группа, заведённая в инвентаре)
+#
+# Браузер не удаляется — снимаются только файлы, манифесты и политики.
+
+- name: Удаление FireWyrm (СЭДД)
+  hosts: "{{ fw_hosts | default('firewyrm') }}"
+  become: true
+  # В ALT Linux нет sudo. Задано в плейбуке, а не в ansible.cfg: при запуске
+  # из чужого каталога (например /etc/ansible/playbook) ansible.cfg отсюда
+  # не читается, а дефолтный become_method — sudo.
+  become_method: su
+  vars_files:
+    - firewyrm_vars.yml
+
+  tasks:
+    - name: Остановить процессы {{ fw_host_bin }}
+      ansible.builtin.command: "pkill -f {{ fw_host_bin }}"
+      register: fw_pkill
+      changed_when: fw_pkill.rc == 0
+      failed_when: fw_pkill.rc not in [0, 1]
+
+    - name: Удалить каталог установки
+      ansible.builtin.file:
+        path: "{{ fw_prefix }}"
+        state: absent
+
+    - name: Удалить {{ fw_plugin_so }}
+      ansible.builtin.file:
+        path: "{{ item }}/{{ fw_plugin_so }}"
+        state: absent
+      loop: "{{ fw_npapi_dirs }}"
+
+    - name: Снять расширение с политики Firefox
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, os, sys
+            path, action, ext_id, url = sys.argv[1:5]
+            try:
+                doc = json.load(open(path))
+            except (IOError, OSError):
+                doc = {}
+            pol = doc.setdefault("policies", {})
+            ext = pol.setdefault("ExtensionSettings", {})
+            if action == "add":
+                ext[ext_id] = {"installation_mode": "force_installed", "install_url": url}
+            else:
+                ext.pop(ext_id, None)
+                if not ext:
+                    pol.pop("ExtensionSettings", None)
+            if action == "remove" and not pol:
+                os.path.exists(path) and os.remove(path)
+                print("removed")
+                sys.exit(0)
+            os.path.isdir(os.path.dirname(path)) or os.makedirs(os.path.dirname(path))
+            tmp = path + ".fw-tmp"
+            with open(tmp, "w") as f:
+                json.dump(doc, f, indent=2, ensure_ascii=False)
+                f.write(chr(10))
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, path)
+            print("written")
+          - "{{ fw_ff_policy }}"
+          - remove
+          - "{{ fw_xpi_id }}"
+          - ""
+      register: fw_ffpol
+      changed_when: fw_ffpol.stdout in ["written", "removed"]
+
+    - name: Удалить расширение Firefox из профилей
+      ansible.builtin.shell:
+        cmd: |
+          rm -vf /home/*/.mozilla/firefox/*.default*/extensions/{{ fw_xpi_id }}.xpi \
+                 /home/*/*/.mozilla/firefox/*.default*/extensions/{{ fw_xpi_id }}.xpi \
+                 /root/.mozilla/firefox/*.default*/extensions/{{ fw_xpi_id }}.xpi
+          for d in {{ fw_firefox_dirs | join(' ') }}; do
+            rm -vf "$d/distribution/extensions/{{ fw_xpi_id }}.xpi"
+          done
+      register: fw_xpi_rm
+      changed_when: fw_xpi_rm.stdout != ""
+
+    - name: Удалить манифесты native messaging
+      ansible.builtin.file:
+        path: "{{ item }}/{{ fw_host }}.json"
+        state: absent
+      loop: "{{ fw_nm_dirs + fw_ff_nm_dirs }}"
+
+    - name: Удалить политики
+      ansible.builtin.file:
+        path: "{{ item }}/{{ fw_policy_name }}"
+        state: absent
+      loop: "{{ fw_policy_dirs }}"
+
+    # Пути известны точно, поэтому без рекурсивного обхода /home: на доменных
+    # профилях он уходит в кэши браузера и работает минутами. Каталоги
+    # пользователей: /home/<user>, доменные /home/<DOMAIN>/<user> и /root.
+    - name: Удалить старые пользовательские копии
+      ansible.builtin.shell:
+        cmd: |
+          for d in /home/*/ /home/*/*/ /root/; do
+            [ -L "$d.mozilla/plugins" ] && rm -vf "$d.mozilla/plugins"
+            rm -vf "$d.config"/*/NativeMessagingHosts/{{ fw_host }}.json \
+                   "$d.mozilla/native-messaging-hosts/{{ fw_host }}.json" \
+                   "$d.mozilla/plugins/{{ fw_plugin_so }}" \
+                   "$d.mozilla/plugins/{{ fw_host_bin }}"
+          done
+      register: fw_stale
+      changed_when: fw_stale.stdout != ""
+
+    - name: Проверить, что ничего не осталось
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ fw_prefix }}"
+        - "{{ fw_npapi_dir }}/{{ fw_plugin_so }}"
+        - "{{ fw_nm_dirs[0] }}/{{ fw_host }}.json"
+        - "{{ fw_policy_dirs[0] }}/{{ fw_policy_name }}"
+      register: fw_check
+
+    - name: Удаление завершено
+      ansible.builtin.assert:
+        that: not (fw_check.results | map(attribute='stat.exists') | max)
+        success_msg: >-
+          Готово. Расширение {{ fw_ext_id }} исчезнет из браузера
+          после его перезапуска.

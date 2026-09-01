@@ -1,0 +1,275 @@
+---
+# Установка FireWyrm (СЭДД).
+#
+#   ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01
+#
+# fw_hosts — не переменная из инвентаря, а шаблон целей ansible. Годится всё,
+# что понимает ansible: имя хоста, список через запятую без пробелов, маска,
+# имя группы из /etc/ansible/hosts:
+#   -e fw_hosts=ws-01,ws-02,ws-03
+#   -e fw_hosts='it-*'
+#   -e fw_hosts=sedd            (группа, заведённая в инвентаре)
+#
+# Если вход на целевую машину идёт не под root — добавьте -K
+# (запросит пароль root для su). Если уже root, become ничего не делает.
+
+- name: Установка FireWyrm (СЭДД)
+  hosts: "{{ fw_hosts | default('firewyrm') }}"
+  become: true
+  # В ALT Linux нет sudo. Задано в плейбуке, а не в ansible.cfg: при запуске
+  # из чужого каталога (например /etc/ansible/playbook) ansible.cfg отсюда
+  # не читается, а дефолтный become_method — sudo.
+  become_method: su
+  vars_files:
+    - firewyrm_vars.yml
+
+  tasks:
+    - name: Проверить наличие файлов дистрибутива
+      ansible.builtin.stat:
+        path: "{{ fw_src }}/{{ item }}"
+      loop:
+        - "{{ fw_host_bin }}"
+        - "{{ fw_plugin_so }}"
+      delegate_to: localhost
+      become: false
+      register: fw_dist
+
+    - name: Дистрибутив должен быть полным
+      ansible.builtin.assert:
+        that: fw_dist.results | map(attribute='stat.exists') | min
+        fail_msg: "Нет файлов дистрибутива в {{ fw_src }} — задайте -e fw_src=/путь/к/sedd"
+
+    # Подписанной сборки может ещё не быть — Chromium от этого не страдает.
+    - name: Проверить наличие подписанного {{ fw_xpi }}
+      ansible.builtin.stat:
+        path: "{{ fw_src }}/{{ fw_xpi }}"
+      delegate_to: localhost
+      become: false
+      register: fw_xpi_src
+
+    - name: Firefox будет пропущен
+      ansible.builtin.debug:
+        msg: >-
+          Нет {{ fw_src }}/{{ fw_xpi }} — ставится только Chromium.
+          Соберите firefox-extension/build.sh, подпишите, положите файл туда.
+      when: not fw_xpi_src.stat.exists
+
+    # Оба отказа тихие: при чужом id файл ляжет под неверным именем и не
+    # совпадёт с allowed_extensions, неподписанный xpi Firefox игнорирует.
+    - name: Прочитать id и подпись из {{ fw_xpi }}
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, sys, zipfile
+            z = zipfile.ZipFile(sys.argv[1])
+            m = json.loads(z.read("manifest.json"))
+            print(m.get("browser_specific_settings", {}).get("gecko", {}).get("id", ""))
+            print("signed" if any(n.startswith("META-INF/") for n in z.namelist()) else "unsigned")
+          - "{{ fw_src }}/{{ fw_xpi }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      register: fw_xpi_info
+      when: fw_xpi_src.stat.exists
+
+    - name: id в xpi обязан совпадать с fw_xpi_id
+      ansible.builtin.assert:
+        that: fw_xpi_info.stdout_lines[0] == fw_xpi_id
+        fail_msg: >-
+          id расширения в {{ fw_xpi }} = "{{ fw_xpi_info.stdout_lines[0] }}",
+          а ожидается "{{ fw_xpi_id }}". Этот же id задаёт имя файла в профиле и
+          allowed_extensions в манифесте хоста — не совпадут, расширение молча не
+          заработает. Поправьте fw_xpi_id или пересоберите xpi.
+      when: fw_xpi_src.stat.exists
+
+    - name: Предупреждение о неподписанном xpi
+      ansible.builtin.debug:
+        msg: >-
+          {{ fw_xpi }} НЕ ПОДПИСАН — Firefox его проигнорирует.
+          Подпишите на addons.mozilla.org (Submit -> On your own).
+      when: fw_xpi_src.stat.exists and fw_xpi_info.stdout_lines[1] != 'signed'
+
+    # --- Браузер --------------------------------------------------------
+    - name: Проверить наличие {{ fw_package }}
+      ansible.builtin.command: "which {{ fw_package }}"
+      register: fw_browser
+      changed_when: false
+      failed_when: false
+
+    - name: Обновить список пакетов
+      ansible.builtin.command: apt-get update
+      when: fw_browser.rc != 0
+      changed_when: true
+
+    - name: Установить {{ fw_package }}
+      ansible.builtin.command: "apt-get install -y {{ fw_package }}"
+      when: fw_browser.rc != 0
+      changed_when: true
+
+    # --- Файлы ----------------------------------------------------------
+    # copy не создаёт каталог назначения — создаём все заранее, одним таском.
+    - name: Создать каталоги назначения
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop: "{{ [fw_prefix, fw_bin_dir, fw_npapi_dir, fw_ff_nm_dir] + fw_nm_dirs + fw_policy_dirs }}"
+
+    - name: Установить {{ fw_host_bin }}
+      ansible.builtin.copy:
+        src: "{{ fw_src }}/{{ fw_host_bin }}"
+        dest: "{{ fw_bin_dir }}/{{ fw_host_bin }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    # Каталог сканирует сам хост, см. комментарий в vars.yml.
+    - name: Установить {{ fw_plugin_so }}
+      ansible.builtin.copy:
+        src: "{{ fw_src }}/{{ fw_plugin_so }}"
+        dest: "{{ fw_npapi_dir }}/{{ fw_plugin_so }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Установить манифест native messaging для Firefox
+      ansible.builtin.copy:
+        content: "{{ fw_ff_manifest | to_nice_json }}\n"
+        dest: "{{ fw_ff_nm_dir }}/{{ fw_host }}.json"
+        owner: root
+        group: root
+        mode: "0644"
+
+    # --- Расширение Firefox ----------------------------------------------
+    - name: Установить {{ fw_xpi }}
+      ansible.builtin.copy:
+        src: "{{ fw_src }}/{{ fw_xpi }}"
+        dest: "{{ fw_prefix }}/{{ fw_xpi }}"
+        owner: root
+        group: root
+        mode: "0644"
+      when: fw_xpi_src.stat.exists
+
+    # Имя каталога профиля у каждого своё (r906vq7n.default-default), поэтому
+    # глоб. Имя файла обязано совпадать с id расширения.
+    - name: Разложить {{ fw_xpi }} по профилям Firefox
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          for p in /home/*/.mozilla/firefox/*.default*/ \
+                   /home/*/*/.mozilla/firefox/*.default*/ \
+                   /root/.mozilla/firefox/*.default*/; do
+            [ -d "$p" ] || continue
+            mkdir -p "$p/extensions"
+            cp -f "{{ fw_prefix }}/{{ fw_xpi }}" "$p/extensions/{{ fw_xpi_id }}.xpi"
+            chown -R --reference="$p" "$p/extensions"
+            echo "$p/extensions/{{ fw_xpi_id }}.xpi"
+          done
+          for d in {{ fw_firefox_dirs | join(' ') }}; do
+            [ -d "$d" ] || continue
+            mkdir -p "$d/distribution/extensions"
+            cp -f "{{ fw_prefix }}/{{ fw_xpi }}" "$d/distribution/extensions/{{ fw_xpi_id }}.xpi"
+            echo "$d/distribution/extensions/{{ fw_xpi_id }}.xpi"
+          done
+      register: fw_xpi_out
+      changed_when: fw_xpi_out.stdout != ""
+      when: fw_xpi_src.stat.exists
+
+    # Слиянием, а не перезаписью: policies.json один на все политики Firefox.
+    - name: Включить расширение политикой Firefox
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, os, sys
+            path, action, ext_id, url = sys.argv[1:5]
+            try:
+                doc = json.load(open(path))
+            except (IOError, OSError):
+                doc = {}
+            pol = doc.setdefault("policies", {})
+            ext = pol.setdefault("ExtensionSettings", {})
+            if action == "add":
+                ext[ext_id] = {"installation_mode": "force_installed", "install_url": url}
+            else:
+                ext.pop(ext_id, None)
+                if not ext:
+                    pol.pop("ExtensionSettings", None)
+            if action == "remove" and not pol:
+                os.path.exists(path) and os.remove(path)
+                print("removed")
+                sys.exit(0)
+            os.path.isdir(os.path.dirname(path)) or os.makedirs(os.path.dirname(path))
+            tmp = path + ".fw-tmp"
+            with open(tmp, "w") as f:
+                json.dump(doc, f, indent=2, ensure_ascii=False)
+                f.write(chr(10))
+            os.chmod(tmp, 0o644)
+            os.replace(tmp, path)
+            print("written")
+          - "{{ fw_ff_policy }}"
+          - add
+          - "{{ fw_xpi_id }}"
+          - "file://{{ fw_prefix }}/{{ fw_xpi }}"
+      register: fw_ffpol
+      changed_when: fw_ffpol.stdout == "written"
+      when: fw_xpi_src.stat.exists
+
+    # --- Манифесты и политики -------------------------------------------
+    - name: Установить манифесты native messaging
+      ansible.builtin.copy:
+        content: "{{ fw_manifest | to_nice_json }}\n"
+        dest: "{{ item }}/{{ fw_host }}.json"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ fw_nm_dirs }}"
+
+    - name: Установить политику принудительной установки расширения
+      ansible.builtin.copy:
+        content: "{{ fw_policy | to_nice_json }}\n"
+        dest: "{{ item }}/{{ fw_policy_name }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ fw_policy_dirs }}"
+
+    # --- Старые пользовательские копии -----------------------------------
+    # Пути известны точно, поэтому без рекурсивного обхода /home: на доменных
+    # профилях он уходит в кэши браузера и работает минутами. Каталоги
+    # пользователей: /home/<user>, доменные /home/<DOMAIN>/<user> и /root.
+    - name: Удалить старые пользовательские копии
+      ansible.builtin.shell:
+        cmd: |
+          for d in /home/*/ /home/*/*/ /root/; do
+            [ -L "$d.mozilla/plugins" ] && rm -vf "$d.mozilla/plugins"
+            rm -vf "$d.config"/*/NativeMessagingHosts/{{ fw_host }}.json \
+                   "$d.mozilla/native-messaging-hosts/{{ fw_host }}.json" \
+                   "$d.mozilla/plugins/{{ fw_plugin_so }}" \
+                   "$d.mozilla/plugins/{{ fw_host_bin }}"
+          done
+      register: fw_stale
+      changed_when: fw_stale.stdout != ""
+
+    # --- Проверка --------------------------------------------------------
+    - name: Проверить результат
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ fw_bin_dir }}/{{ fw_host_bin }}"
+        - "{{ fw_npapi_dir }}/{{ fw_plugin_so }}"
+        - "{{ fw_nm_dirs[0] }}/{{ fw_host }}.json"
+        - "{{ fw_policy_dirs[0] }}/{{ fw_policy_name }}"
+      register: fw_check
+
+    - name: Все ключевые файлы на месте
+      ansible.builtin.assert:
+        that: fw_check.results | map(attribute='stat.exists') | min
+        success_msg: >-
+          Готово. Перезапустите {{ fw_package }} — расширение {{ fw_ext_id }}
+          установится политикой автоматически (проверка: chrome://policy).

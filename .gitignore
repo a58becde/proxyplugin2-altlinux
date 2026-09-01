@@ -1,0 +1,10 @@
+# Мусор ОС и редакторов
+.DS_Store
+*.swp
+
+# Логи и выгрузки консоли браузера — содержат внутренние адреса
+*.log
+console-export-*.txt
+
+# Результаты сборки
+proxyplugin2-firefox-UNSIGNED.xpi

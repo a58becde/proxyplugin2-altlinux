@@ -1,0 +1,7 @@
+{
+   "name": "ru.intertrust.firewyrmhost",
+   "description": "FireBreath FireWyrm Native Messaging Wyrmhole",
+   "path": "Full path to FireWyrmNativeMessageHost",
+   "type": "stdio",
+   "allowed_origins": ["chrome-extension://dpkefahlefbmfgfgfoppbpkacgdmadpp/"]
+}

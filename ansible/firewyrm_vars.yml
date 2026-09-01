@@ -1,0 +1,103 @@
+---
+# Параметры установки FireWyrm (СЭДД).
+# Значения дублируют lib/firewyrm.sh — меняйте в обоих местах.
+
+# Каталог с дистрибутивом (бинарник и .so). Читается с управляющего узла,
+# на целевые машины заранее копировать ничего не нужно.
+# По умолчанию — соседний с каталогом плейбуков, что верно для обеих раскладок:
+#   /etc/ansible/playbook/firewyrm_install.yml  ->  /etc/ansible/sedd
+#   /root/firewyrm/ansible/firewyrm_install.yml ->  /root/firewyrm/sedd
+# Любой другой путь задаётся на запуске:  -e fw_src=/путь/к/sedd
+fw_src: "{{ playbook_dir }}/../sedd"
+
+fw_prefix: /opt/firewyrm
+fw_bin_dir: "{{ fw_prefix }}/bin"
+
+fw_host: ru.intertrust.firewyrmhost
+fw_host_bin: FireWyrmNativeMessageHost
+fw_plugin_so: npProxyPlugin2.so
+
+# Расширение Firefox — подписанная сборка из firefox-extension/.
+# fw_xpi_id обязан совпадать с browser_specific_settings.gecko.id: по нему
+# именуется файл в каталоге extensions (иначе Firefox его игнорирует) и по нему
+# же хост пускает расширение (allowed_extensions).
+fw_xpi: proxyplugin2-firefox.xpi
+fw_xpi_id: "{aa17458a-0172-46a5-a961-f8028a5883d2}"
+
+# Каталоги установки Firefox: в distribution/extensions расширение попадает
+# во вновь создаваемые профили.
+fw_firefox_dirs:
+  - /usr/lib64/firefox
+  - /usr/lib/firefox
+  - /usr/lib64/firefox-esr
+  - /usr/lib/firefox-esr
+
+fw_ext_id: dpkefahlefbmfgfgfoppbpkacgdmadpp
+fw_ext_update_url: https://clients2.google.com/service/update2/crx
+fw_ext_source: https://sedd.nso.ru/*
+fw_policy_name: firewyrm.json             # свой файл, чужие политики не трогаем
+
+fw_package: chromium                      # пакет браузера (ALT Linux)
+
+# Каталог NPAPI-плагинов: его сканирует сам FireWyrmNativeMessageHost
+# (в бинарнике зашиты $HOME/.mozilla/plugins, /usr/lib/mozilla/plugins,
+#  /usr/lib64/mozilla/plugins).
+fw_npapi_dir: "{{ '/usr/lib64/mozilla/plugins'
+                  if ansible_facts.architecture == 'x86_64'
+                  else '/usr/lib/mozilla/plugins' }}"
+# Манифесты native messaging для Firefox: формат отличается от Chromium —
+# ключ allowed_extensions с id расширения вместо allowed_origins.
+fw_ff_nm_dir: "{{ fw_npapi_dir | regex_replace('/plugins$', '/native-messaging-hosts') }}"
+# Политика Firefox: один общий файл на все политики, поэтому правим слиянием.
+# Без неё расширение из каталога профиля активируется только со второго
+# запуска браузера — первый старт его лишь регистрирует.
+fw_ff_policy: /etc/firefox/policies/policies.json
+
+fw_ff_nm_dirs:
+  - /usr/lib64/mozilla/native-messaging-hosts
+  - /usr/lib/mozilla/native-messaging-hosts
+
+fw_npapi_dirs:
+  - /usr/lib64/mozilla/plugins
+  - /usr/lib/mozilla/plugins
+
+# Общесистемные каталоги браузеров: работают для всех пользователей,
+# поэтому имя пользователя и его домашний каталог знать не нужно.
+# Набор браузеров — как в исходном установщике вендора, приоритет chromium.
+fw_nm_dirs:
+  - /etc/chromium/native-messaging-hosts                 # chromium (ALT Linux)
+  - /etc/chromium-browser/native-messaging-hosts         # chromium (сборки Debian-типа)
+  - /etc/chromium-gost/native-messaging-hosts            # chromium-gost
+  - /etc/opt/chrome/native-messaging-hosts               # google-chrome
+  - /etc/opt/yandex/browser/native-messaging-hosts       # yandex-browser
+  - /etc/opt/yandex/browser-beta/native-messaging-hosts  # yandex-browser-beta
+
+fw_policy_dirs:
+  - /etc/chromium/policies/managed
+  - /etc/chromium-browser/policies/managed
+  - /etc/chromium-gost/policies/managed
+  - /etc/opt/chrome/policies/managed
+  - /etc/opt/yandex/browser/policies/managed
+  - /etc/opt/yandex/browser-beta/policies/managed
+
+fw_manifest:
+  name: "{{ fw_host }}"
+  description: FireBreath FireWyrm Native Messaging Wyrmhole
+  path: "{{ fw_bin_dir }}/{{ fw_host_bin }}"
+  type: stdio
+  allowed_origins:
+    - "chrome-extension://{{ fw_ext_id }}/"
+
+fw_ff_manifest:
+  name: "{{ fw_host }}"
+  description: FireBreath FireWyrm Native Messaging Wyrmhole
+  path: "{{ fw_bin_dir }}/{{ fw_host_bin }}"
+  type: stdio
+  allowed_extensions:
+    - "{{ fw_xpi_id }}"
+
+fw_policy:
+  ExtensionInstallForcelist:
+    - "{{ fw_ext_id }};{{ fw_ext_update_url }}"
+  ExtensionInstallSources:
+    - "{{ fw_ext_source }}"

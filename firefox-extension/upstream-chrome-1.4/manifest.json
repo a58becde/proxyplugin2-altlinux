@@ -1,0 +1,24 @@
+{
+   "background": {
+      "service_worker": "background.js"
+   },
+   "content_scripts": [ {
+      "js": [ "content.js" ],
+      "matches": [ "\u003Call_urls>" ],
+      "run_at": "document_start"
+   } ],
+   "description": "Allows use of CMJ plugins",
+   "icons": {
+      "128": "icon-128.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjEqSYoaO8UAhz8LiEbtEOgHHcG4dTpKMb2il7VuEAuvYGrCMklLDmm6oSO54gHL57YU1v3OxhS0pEjQGYDydKMYAJ0oOWbbHOBHDfeL4VEtIuD741DIaBHkhL3X/JI7vdL0dpFt3uWNiH+yqZp/+gBecqba8NbIvDEMr3VJQs/MItB3bqTwsC+130C/iuUCZFIYP1gynP9MKOW7Q6J4Bamv4jsVsL5OCTY1q6WDD6Vr3YmT/8yXxvsnVMskLKegpTGXwkGyudGT9tizbF3iyGO38hF7oQuaLoxMGe791CZ7RaWt9b+2GSHmrAh23No6J1bP6axVUuNsDq9sy4NezFQIDAQAB",
+   "manifest_version": 3,
+   "name": "ProxyPlugin2 CMJ Plugin Adapter",
+   "permissions": [ "nativeMessaging" ],
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "1.4",
+   "web_accessible_resources": [ {
+      "matches": [ "*://*/*" ],
+      "resources": [ "FirePromise.js" ]
+   } ]
+}

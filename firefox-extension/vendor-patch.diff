@@ -1,0 +1,103 @@
+--- background.js.orig
++++ background.js
+@@ -31,9 +31,16 @@
+     hostPort.onDisconnect.addListener(function() {
+         // The host (native message host) disconnected, so disconnect
+         // the script port. If there is an error, report it first
+-        if (chrome.runtime.lastError) {
+-            scriptPort.postMessage({error: "Disconnected", message: chrome.runtime.lastError.message});
+-            console.warn("Disconnected:", chrome.runtime.lastError.message);
++        // Firefox port: Chrome reports the reason through runtime.lastError,
++        // Firefox puts it on the port itself (port.error). Without reading both
++        // the page only sees a bare "Disconnected" with no explanation - which
++        // hides the common causes: extension id missing from allowed_extensions,
++        // wrong path in the host manifest, host binary not executable.
++        var reason = (chrome.runtime.lastError && chrome.runtime.lastError.message) ||
++                     (hostPort.error && hostPort.error.message) || "";
++        if (reason) {
++            scriptPort.postMessage({error: "Disconnected", message: reason});
++            console.warn("Disconnected:", reason);
+         } else {
+             scriptPort.postMessage({error: "Disconnected"});
+         }
+--- content.js.orig
++++ content.js
+@@ -44,7 +44,12 @@
+ 
+     function createWyrmhole() {
+         var portName = "FireWyrmPort" + (nextId++);
+-        var port = chrome.runtime.connect(extId, {name: portName});
++        // Firefox port: do not pass our own extension id here. In Chrome,
++        // connect(extId, ...) from a content script reaches our own
++        // background page; in Firefox the same call goes out over the
++        // external channel (onConnectExternal) and onConnect stays silent.
++        var port = chrome.runtime.connect({name: portName});
++        console.log('[FireWyrm-FF] wyrmhole port created: ' + portName);
+         ports[portName] = port;
+ 
+         window.postMessage({
+@@ -54,6 +59,14 @@
+             message: "Created"
+         }, "*");
+         port.onMessage.addListener(function(msg) {
++            if (msg && msg.status) {
++                console.log('[FireWyrm-FF] host status: ' + msg.status +
++                            (msg.plugin !== undefined ? ', plugin=' + msg.plugin : ''));
++            }
++            if (msg && msg.error) {
++                console.warn('[FireWyrm-FF] native host error: ' + msg.error +
++                             (msg.message ? ' / ' + msg.message : ''));
++            }
+             // Message from the background script received, post it to the page
+             msg.source = "host";
+             msg.port = portName;
+@@ -72,7 +85,27 @@
+         });
+     }
+ 
++    // Firefox: the page does not start the handshake itself (Chromium gets a
++    // different bootstrap). Start the vendor's own protocol from our side.
++    (function () {
++        var s = document.createElement('script');
++        s.src = chrome.runtime.getURL('kickstart.js');
++        s.onload = function () { this.remove(); };
++        (document.head || document.documentElement).appendChild(s);
++    })();
++
++    var firePromiseInjected = false;
++
+     function initPage(evt) {
++        console.log('[FireWyrm-FF] handshake from page, callback=' + evt.callback);
++        // Each injection adds another FireBreathLoadedEvent listener, so a
++        // second handshake would create extra wyrmholes and answers would
++        // reach the wrong instance ("Invalid msg id!"). Inject once.
++        if (firePromiseInjected) {
++            console.log('[FireWyrm-FF] FirePromise.js already injected, duplicate ignored');
++            return;
++        }
++        firePromiseInjected = true;
+         injectScript(extId, evt.callback);
+     }
+ 
+@@ -81,11 +114,16 @@
+         s.src = chrome.runtime.getURL('FirePromise.js');
+         s.onload = function() {
+             this.remove();
+-            window.dispatchEvent(new CustomEvent('FireBreathLoadedEvent', {
+-                'detail': {
+-                    'message': id + "|" + function_name
+-                }
+-            }));
++            // Firefox port: objects created in the content script cannot be read
++            // from page context (Xray vision). FirePromise.js reads
++            // e.detail.message, so the detail must be cloned into the page's
++            // compartment first, otherwise it throws
++            // "Permission denied to access property message".
++            var detail = {message: id + "|" + function_name};
++            if (typeof cloneInto === 'function') {
++                detail = cloneInto(detail, window);
++            }
++            window.dispatchEvent(new CustomEvent('FireBreathLoadedEvent', {detail: detail}));
+         };
+         (document.head || document.documentElement).appendChild(s);
+     }
