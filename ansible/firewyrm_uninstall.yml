@@ -28,20 +28,49 @@
     - firewyrm_vars.yml
 
   tasks:
-    - name: Проверить наличие вспомогательного скрипта
+    # Пути определяются сами: файлы можно оставить в проекте, а можно положить
+    # рядом со своими плейбуками — оба варианта работают без переменных.
+    # Явные -e fw_src=... и -e fw_xpi_helper=... имеют приоритет над поиском.
+    - name: Найти файлы проекта
       ansible.builtin.stat:
-        path: "{{ fw_xpi_helper }}"
+        path: "{{ item }}"
       delegate_to: localhost
       become: false
-      register: fw_helper_stat
+      changed_when: false
+      loop:
+        - "{{ playbook_dir }}/sedd"
+        - "{{ playbook_dir }}/../sedd"
+        - "{{ playbook_dir }}/firewyrm-firefox-xpi.sh"
+        - "{{ playbook_dir }}/../lib/firewyrm-firefox-xpi.sh"
+      register: fw_paths
 
-    - name: Структура проекта на месте
+    # Без самоссылки вида fw_src: "{{ fw_src | default(...) }}" — в части версий
+    # Ansible она даёт "recursive loop detected". Заданное через -e значение
+    # уже определено, и задача просто пропускается.
+    - name: Определить каталог дистрибутива
+      ansible.builtin.set_fact:
+        fw_src: "{{ fw_exists | select('search', '/sedd$') | list | first | default('') }}"
+      vars:
+        fw_exists: "{{ fw_paths.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+      when: fw_src is not defined
+
+    - name: Определить вспомогательный скрипт
+      ansible.builtin.set_fact:
+        fw_xpi_helper: "{{ fw_exists | select('search', 'firewyrm-firefox-xpi[.]sh$') | list | first | default('') }}"
+      vars:
+        fw_exists: "{{ fw_paths.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+      when: fw_xpi_helper is not defined
+
+    - name: Файлы проекта найдены
       ansible.builtin.assert:
-        that: fw_helper_stat.stat.exists
+        that:
+          - fw_src | length > 0
+          - fw_xpi_helper | length > 0
         fail_msg: >-
-          Нет {{ fw_xpi_helper }} — в нём вся работа с профилями Firefox.
-          Копируйте проект целиком, либо укажите путь явно:
-          -e fw_xpi_helper=/путь/к/firewyrm-firefox-xpi.sh
+          Не найдены файлы проекта рядом с плейбуком ({{ playbook_dir }}).
+          Положите туда каталог sedd/ и firewyrm-firefox-xpi.sh, либо укажите
+          пути явно: -e fw_src=/путь/к/sedd -e fw_xpi_helper=/путь/к/firewyrm-firefox-xpi.sh
+        success_msg: "дистрибутив: {{ fw_src }}, скрипт профилей: {{ fw_xpi_helper }}"
 
     - name: Остановить процессы {{ fw_host_bin }}
       ansible.builtin.command: "pkill -f {{ fw_host_bin }}"

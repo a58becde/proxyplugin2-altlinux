@@ -83,7 +83,8 @@ ansible-playbook -i /etc/ansible/hosts firewyrm_uninstall.yml -e fw_hosts=ws-01
 ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01,ws-02,ws-03
 ```
 
-Перед выкаткой убедитесь, что на управляющем узле лежит актуальная копия
-проекта целиком и
+Перед выкаткой убедитесь, что на управляющем узле лежат актуальные файлы
+(проект целиком либо плейбуки + `firewyrm-firefox-xpi.sh` + `sedd/` в одном
+каталоге) и
 каталог `sedd/` с подписанным xpi: Ansible раздаёт файлы с него, а не с
 рабочей станции.

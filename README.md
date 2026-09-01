@@ -80,21 +80,35 @@ bash /путь/к/install.sh
 
 ### Вариант 2 — Ansible
 
-Скопируйте проект целиком на управляющий узел и запускайте из каталога
-`ansible/`. Раскладывать файлы по отдельности не нужно: плейбук сам найдёт и
-дистрибутив в `sedd/`, и вспомогательный скрипт в `lib/`.
+Плейбук сам находит нужные ему файлы — переменные задавать не нужно ни в одном
+из двух вариантов раскладки.
+
+**Проект целиком.** Скопировать папку на управляющий узел и запускать из
+`ansible/`:
 
 ```bash
 rsync -av --exclude .git /путь/к/proxyplugin2-altlinux/ root@<узел>:/opt/proxyplugin2-altlinux/
 ```
 
-Каталог может быть любым — важно лишь, чтобы структура проекта осталась целой.
-На целевые машины заранее копировать ничего не надо, Ansible раздаёт файлы
-с управляющего узла.
-
 ```bash
 cd /opt/proxyplugin2-altlinux/ansible
 ```
+
+**Или только нужные файлы** — если плейбуки живут в общем каталоге рядом
+с вашими. Скопировать в этот каталог:
+
+```
+firewyrm_install.yml
+firewyrm_uninstall.yml
+firewyrm_vars.yml
+firewyrm-firefox-xpi.sh   (из lib/)
+sedd/                     (каталог целиком)
+```
+
+Всё в одно место, никаких `-e`. Плейбук проверяет наличие этих файлов первым
+делом и, если чего-то нет, называет, чего именно.
+
+Дальше одинаково:
 
 ```bash
 ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01
@@ -103,6 +117,9 @@ ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01
 ```bash
 ansible-playbook -i /etc/ansible/hosts firewyrm_uninstall.yml -e fw_hosts=ws-01
 ```
+
+На целевые машины заранее копировать ничего не надо: Ansible раздаёт файлы
+с управляющего узла.
 
 `fw_hosts` — это шаблон целей ansible, а не переменная из инвентаря. Принимает
 имя хоста, список через запятую без пробелов, маску или имя группы:
@@ -121,21 +138,6 @@ ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01,ws
 
 Рабочий инвентарь `/etc/ansible/hosts` берётся специально: в нём заданы
 переменные подключения.
-
-#### Если плейбуки нужны в общем каталоге
-
-Когда плейбуки кладут в `/etc/ansible/playbook/` рядом с чужими, структура
-проекта распадается и два пути надо задать явно:
-
-```bash
-ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01 \
-    -e fw_src=/etc/ansible/sedd \
-    -e fw_xpi_helper=/etc/ansible/firewyrm-firefox-xpi.sh
-```
-
-Тогда нужно скопировать: три файла `firewyrm_*.yml` в каталог плейбуков,
-каталог `sedd/` и `lib/firewyrm-firefox-xpi.sh` — туда, куда указывают
-переменные выше. Способ с целой папкой проще, и я рекомендую его.
 
 ## Что и куда ставится
 

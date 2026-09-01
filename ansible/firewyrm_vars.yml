@@ -2,13 +2,9 @@
 # Параметры установки FireWyrm (СЭДД).
 # Значения дублируют lib/firewyrm.sh — меняйте в обоих местах.
 
-# Каталог с дистрибутивом (бинарник и .so). Читается с управляющего узла,
-# на целевые машины заранее копировать ничего не нужно.
-# По умолчанию — соседний с каталогом плейбуков, что верно для обеих раскладок:
-#   /etc/ansible/playbook/firewyrm_install.yml  ->  /etc/ansible/sedd
-#   /root/firewyrm/ansible/firewyrm_install.yml ->  /root/firewyrm/sedd
-# Любой другой путь задаётся на запуске:  -e fw_src=/путь/к/sedd
-fw_src: "{{ playbook_dir }}/../sedd"
+# fw_src (каталог дистрибутива) и fw_xpi_helper (скрипт раскладки расширения)
+# здесь не заданы: плейбук ищет их сам рядом с собой и в структуре проекта.
+# Задать вручную: -e fw_src=... -e fw_xpi_helper=...
 
 fw_prefix: /opt/firewyrm
 fw_bin_dir: "{{ fw_prefix }}/bin"
@@ -52,12 +48,6 @@ fw_ff_nm_dir: "{{ fw_npapi_dir | regex_replace('/plugins$', '/native-messaging-h
 # Без неё расширение из каталога профиля активируется только со второго
 # запуска браузера — первый старт его лишь регистрирует.
 fw_ff_policy: /etc/firefox/policies/policies.json
-
-# Общий с sh-версией скрипт раскладки расширения по профилям Firefox: логика
-# профилей одна на оба способа установки. Путь — относительно каталога
-# плейбуков, как файлы и лежат в проекте. Если раскладывали иначе:
-#   -e fw_xpi_helper=/путь/к/firewyrm-firefox-xpi.sh
-fw_xpi_helper: "{{ playbook_dir }}/../lib/firewyrm-firefox-xpi.sh"
 
 fw_ff_nm_dirs:
   - /usr/lib64/mozilla/native-messaging-hosts
