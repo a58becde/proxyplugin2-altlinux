@@ -41,13 +41,14 @@ native messaging, политики принудительной установк
 * Для варианта с Ansible: ansible-core на управляющем узле,
   проверено на 2.15.9 с Python 3.9
 
-Полная проверенная конфигурация, включая версию СЭДД — в разделе
-[Проверено на](#проверено-на).
 * Дистрибутив вендора в `sedd/`: `FireWyrmNativeMessageHost`,
   `npProxyPlugin2.so`, `ru.intertrust.firewyrmhost.json`
 * Для Firefox: подписанный `sedd/proxyplugin2-firefox.xpi`
   (см. [docs/firefox-port.md](docs/firefox-port.md)); без него ставится
   только Chromium
+
+Полная проверенная конфигурация, включая версию СЭДД — в разделе
+[Проверено на](#проверено-на).
 
 ## Установка
 
