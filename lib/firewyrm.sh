@@ -214,13 +214,11 @@ else:
 
 if action == 'purge' and not pol:
     # Файл наш и больше в нём ничего нет — убираем целиком.
-    print('EMPTY')
     sys.exit(0)
 
 with open(tmp, 'w') as f:
     json.dump(doc, f, indent=2, ensure_ascii=False)
     f.write('\n')
-print('WRITTEN')
 PYFF
     then
         if [ -f "$tmp" ]; then
