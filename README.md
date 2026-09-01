@@ -31,9 +31,18 @@ native messaging, политики принудительной установк
 
 ## Требования
 
-* ALT Linux, доступ root (`su -`)
+* **ALT Linux**, доступ root (`su -`). Проверено на ALT SP Workstation 10
+  (10.2.2, ветка c10f2, ядро 6.12.103, x86_64)
+* **Chromium** — ставится автоматически, если не найден. Проверено на
+  139.0.7258.138 (сборка ALT Linux)
+* **Firefox ESR** — опционально, только если нужна работа СЭДД в нём.
+  Проверено на 140.13.0 ESR
 * `python3` — для проверки xpi и слияния политик Firefox
-* Для варианта с Ansible: ansible-core на управляющем узле
+* Для варианта с Ansible: ansible-core на управляющем узле,
+  проверено на 2.15.9 с Python 3.9
+
+Полная проверенная конфигурация, включая версию СЭДД — в разделе
+[Проверено на](#проверено-на).
 * Дистрибутив вендора в `sedd/`: `FireWyrmNativeMessageHost`,
   `npProxyPlugin2.so`, `ru.intertrust.firewyrmhost.json`
 * Для Firefox: подписанный `sedd/proxyplugin2-firefox.xpi`
