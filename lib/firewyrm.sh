@@ -306,12 +306,25 @@ fw_clean_user_leftovers() {
 # эти функции, и плейбуки Ansible. Логика одна на оба способа установки.
 FW_XPI_SCRIPT="${FW_LIB_DIR}/firewyrm-firefox-xpi.sh"
 
+# Запускаем через bash, а не напрямую: домашние каталоги (особенно доменные)
+# часто смонтированы с noexec, и тогда файл со всеми правами на исполнение
+# запустить нельзя, а test -x на нём возвращает ложь. Чтение при этом работает.
 fw_xpi_run() {   # <install|remove|list> [аргументы]
-    [ -x "${FW_XPI_SCRIPT}" ] || fw_die "нет вспомогательного скрипта ${FW_XPI_SCRIPT}
-Он обязателен: в нём вся работа с профилями Firefox. Скопируйте его вместе
-с install.sh, uninstall.sh и lib/firewyrm.sh."
+    if [ ! -f "${FW_XPI_SCRIPT}" ] || [ ! -r "${FW_XPI_SCRIPT}" ]; then
+        fw_warn "нет вспомогательного скрипта ${FW_XPI_SCRIPT}"
+        return 1
+    fi
     FW_USER_DIRS="${FW_USER_DIRS[*]}" FW_FIREFOX_DIRS="${FW_FIREFOX_DIRS[*]}" \
-        "${FW_XPI_SCRIPT}" "$@"
+        bash "${FW_XPI_SCRIPT}" "$@"
+}
+
+# Жёсткая проверка — отдельно и до работы: fw_xpi_run вызывается внутри
+# подстановки процесса, где exit убил бы только подоболочку, а скрипт продолжил
+# бы работу как ни в чём не бывало.
+fw_xpi_require() {
+    [ -f "${FW_XPI_SCRIPT}" ] && [ -r "${FW_XPI_SCRIPT}" ] || fw_die \
+"нет вспомогательного скрипта ${FW_XPI_SCRIPT} — в нём вся работа с профилями Firefox.
+Копируйте каталог lib/ целиком, а не только firewyrm.sh."
 }
 
 # Проверка файла расширения до установки. Два отказа тихие и потому опасные:
