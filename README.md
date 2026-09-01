@@ -40,7 +40,6 @@ native messaging, политики принудительной установк
 * `python3` — для проверки xpi и слияния политик Firefox
 * Для варианта с Ansible: ansible-core на управляющем узле,
   проверено на 2.15.9 с Python 3.9
-
 * Дистрибутив вендора в `sedd/`: `FireWyrmNativeMessageHost`,
   `npProxyPlugin2.so`, `ru.intertrust.firewyrmhost.json`
 * Для Firefox: подписанный `sedd/proxyplugin2-firefox.xpi`
