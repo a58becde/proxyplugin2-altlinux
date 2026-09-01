@@ -64,7 +64,7 @@ Firefox помнят его в своих базах.
 ## 4–6. То же через Ansible
 
 ```bash
-cd /etc/ansible/playbook
+cd /opt/proxyplugin2-altlinux/ansible
 ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01
 ```
 
@@ -83,8 +83,7 @@ ansible-playbook -i /etc/ansible/hosts firewyrm_uninstall.yml -e fw_hosts=ws-01
 ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01,ws-02,ws-03
 ```
 
-Перед выкаткой убедитесь, что рядом с плейбуками лежит `firewyrm-firefox-xpi.sh`
-(без него задача раскладки расширения не выполнится), а также что на
-управляющем узле актуальные плейбуки и
+Перед выкаткой убедитесь, что на управляющем узле лежит актуальная копия
+проекта целиком и
 каталог `sedd/` с подписанным xpi: Ansible раздаёт файлы с него, а не с
 рабочей станции.

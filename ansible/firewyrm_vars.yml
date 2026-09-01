@@ -53,10 +53,11 @@ fw_ff_nm_dir: "{{ fw_npapi_dir | regex_replace('/plugins$', '/native-messaging-h
 # запуска браузера — первый старт его лишь регистрирует.
 fw_ff_policy: /etc/firefox/policies/policies.json
 
-# Общий с sh-версией скрипт раскладки расширения по профилям Firefox.
-# Копируется рядом с плейбуками (см. README), чтобы логика профилей была одна
-# на оба способа установки.
-fw_xpi_helper: "{{ playbook_dir }}/firewyrm-firefox-xpi.sh"
+# Общий с sh-версией скрипт раскладки расширения по профилям Firefox: логика
+# профилей одна на оба способа установки. Путь — относительно каталога
+# плейбуков, как файлы и лежат в проекте. Если раскладывали иначе:
+#   -e fw_xpi_helper=/путь/к/firewyrm-firefox-xpi.sh
+fw_xpi_helper: "{{ playbook_dir }}/../lib/firewyrm-firefox-xpi.sh"
 
 fw_ff_nm_dirs:
   - /usr/lib64/mozilla/native-messaging-hosts

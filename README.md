@@ -80,25 +80,28 @@ bash /путь/к/install.sh
 
 ### Вариант 2 — Ansible
 
-Файлы плейбука самодостаточны: `firewyrm_install.yml`,
-`firewyrm_uninstall.yml` и `firewyrm_vars.yml` должны лежать рядом друг с
-другом. Каталог `sedd/` нужен на управляющем узле — файлы раздаются с него, на
-целевые машины заранее копировать ничего не надо.
+Скопируйте проект целиком на управляющий узел и запускайте из каталога
+`ansible/`. Раскладывать файлы по отдельности не нужно: плейбук сам найдёт и
+дистрибутив в `sedd/`, и вспомогательный скрипт в `lib/`.
 
 ```bash
-scp ansible/firewyrm_*.yml lib/firewyrm-firefox-xpi.sh root@<управляющий-узел>:/etc/ansible/playbook/
+rsync -av --exclude .git /путь/к/proxyplugin2-altlinux/ root@<узел>:/opt/proxyplugin2-altlinux/
 ```
 
-`firewyrm-firefox-xpi.sh` — общий с sh-версией скрипт раскладки расширения по
-профилям Firefox. Он должен лежать рядом с плейбуками: логика профилей одна на
-оба способа установки, чтобы они не расходились.
+Каталог может быть любым — важно лишь, чтобы структура проекта осталась целой.
+На целевые машины заранее копировать ничего не надо, Ansible раздаёт файлы
+с управляющего узла.
 
 ```bash
-rsync -av --exclude .DS_Store sedd/ root@<управляющий-узел>:/etc/ansible/sedd/
+cd /opt/proxyplugin2-altlinux/ansible
 ```
 
 ```bash
 ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01
+```
+
+```bash
+ansible-playbook -i /etc/ansible/hosts firewyrm_uninstall.yml -e fw_hosts=ws-01
 ```
 
 `fw_hosts` — это шаблон целей ansible, а не переменная из инвентаря. Принимает
@@ -115,6 +118,24 @@ ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01,ws
 
 Повышение прав идёт через `su` (`become_method: su` задан в самих плейбуках).
 Если вход на целевую машину не под root, добавьте `-K`.
+
+Рабочий инвентарь `/etc/ansible/hosts` берётся специально: в нём заданы
+переменные подключения.
+
+#### Если плейбуки нужны в общем каталоге
+
+Когда плейбуки кладут в `/etc/ansible/playbook/` рядом с чужими, структура
+проекта распадается и два пути надо задать явно:
+
+```bash
+ansible-playbook -i /etc/ansible/hosts firewyrm_install.yml -e fw_hosts=ws-01 \
+    -e fw_src=/etc/ansible/sedd \
+    -e fw_xpi_helper=/etc/ansible/firewyrm-firefox-xpi.sh
+```
+
+Тогда нужно скопировать: три файла `firewyrm_*.yml` в каталог плейбуков,
+каталог `sedd/` и `lib/firewyrm-firefox-xpi.sh` — туда, куда указывают
+переменные выше. Способ с целой папкой проще, и я рекомендую его.
 
 ## Что и куда ставится
 

@@ -1,7 +1,12 @@
 ---
 # Удаление FireWyrm (СЭДД).
 #
+#   cd <каталог проекта>/ansible
 #   ansible-playbook -i /etc/ansible/hosts firewyrm_uninstall.yml -e fw_hosts=ws-01
+#
+# Запускать из каталога ansible/ внутри проекта: дистрибутив (../sedd) и
+# вспомогательный скрипт (../lib) находятся относительно него. Если файлы
+# разложены иначе — задайте -e fw_src=... и -e fw_xpi_helper=...
 #
 # fw_hosts — не переменная из инвентаря, а шаблон целей ansible. Годится всё,
 # что понимает ansible: имя хоста, список через запятую без пробелов, маска,
@@ -23,6 +28,21 @@
     - firewyrm_vars.yml
 
   tasks:
+    - name: Проверить наличие вспомогательного скрипта
+      ansible.builtin.stat:
+        path: "{{ fw_xpi_helper }}"
+      delegate_to: localhost
+      become: false
+      register: fw_helper_stat
+
+    - name: Структура проекта на месте
+      ansible.builtin.assert:
+        that: fw_helper_stat.stat.exists
+        fail_msg: >-
+          Нет {{ fw_xpi_helper }} — в нём вся работа с профилями Firefox.
+          Копируйте проект целиком, либо укажите путь явно:
+          -e fw_xpi_helper=/путь/к/firewyrm-firefox-xpi.sh
+
     - name: Остановить процессы {{ fw_host_bin }}
       ansible.builtin.command: "pkill -f {{ fw_host_bin }}"
       register: fw_pkill
